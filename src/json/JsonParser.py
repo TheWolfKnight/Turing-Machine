@@ -15,6 +15,7 @@ class JsonParser(object):
     def parse_file(self) -> dict:
         building_key: bool = True
 
+        scope: list[str] = list()
 
         for _, char in enumerate(self.fp.read()):
             key = self._key_builder()
