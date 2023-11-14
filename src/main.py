@@ -4,7 +4,7 @@ from json.JsonParser import JsonParser
 
 
 def main(args: list[str]):
-    parser = JsonParser("./src/main.py")
+    parser = JsonParser("./tmp/test.json")
     parser.parse_file()
 
 
