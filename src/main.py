@@ -1,5 +1,7 @@
 
 from sys import argv
+from typing import Iterator
+
 from json.JsonParser import JsonParser
 
 

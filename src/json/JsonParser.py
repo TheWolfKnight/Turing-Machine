@@ -1,7 +1,10 @@
 
 from dataclasses import dataclass
-from typing import Any, Type
+from typing import Any, Type, Iterator, Callable
 from enum import Enum
+
+
+from fs import FileWrapper
 
 
 class _ScopeChange(Enum):
@@ -29,21 +32,19 @@ class _ValueTypeWrapper(object):
 class JsonParser(object):
     def __init__(self, path: str, allow_traling_comma: bool = False):
         self.path = path
-        self.fp = open(path, 'r')
-        self._get_file_size()
+        self.fp = FileWrapper(path)
         self.allow_traling_comma = allow_traling_comma
         self._result: dict = dict()
 
-    def _get_file_size(self):
-        self.fp.seek(0, 2)
-        self.file_size: int = self.fp.tell()
-        self.fp.seek(0, 0)
-
     def parse_file(self) -> dict:
+        result = self._parse_content(self.fp, self._file_is_eof)
+        return result
+
+    def _parse_content(self, content: Iterator[str], stop_condition: Callable[[], bool]) -> dict:
         scopes: list[str] = list()
 
-        while not self._file_is_eof():
-            key = self._key_builder()
+        while not stop_condition():
+            key = self._key_builder(content, stop_condition)
 
             if key is _ScopeChange.Decrease:
                 scopes.pop()
@@ -51,7 +52,7 @@ class JsonParser(object):
 
             key = str(key)
 
-            value = self._value_builder()
+            value = self._value_builder(content, stop_condition)
 
             if value is _ScopeChange.Increase:
                 scopes.append(key)
@@ -72,7 +73,6 @@ class JsonParser(object):
                 target_dict = target_dict[key]
                 i += 1
 
-
             target_dict[key] = self._convert_value(value)
 
             print(f"{('  '*i)}key: {key}")
@@ -83,11 +83,11 @@ class JsonParser(object):
 
         return self._result
 
-    def _key_builder(self) -> str | _ScopeChange:
+    def _key_builder(self, content: Iterator[str], stop_condition: Callable[[], bool]) -> str | _ScopeChange:
         key: str = ""
 
-        while not self._file_is_eof():
-            char: str = self.fp.read(1)
+        while not stop_condition():
+            char: str = next(content)
 
             if char == '}':
                 return _ScopeChange.Decrease
@@ -95,58 +95,87 @@ class JsonParser(object):
             if char in "{ \n\t":
                 continue
             if char in "\"\'":
-                key = self._string_builder(char)
+                key = self._string_builder(char, content, stop_condition)
                 break
 
         return key
 
-    def _value_builder(self) -> _ScopeChange | _ValueTypeWrapper:
+    def _value_builder(self, content: Iterator[str], stop_condition: Callable[[], bool]) -> _ScopeChange | _ValueTypeWrapper:
 
-        while not self._file_is_eof():
-            char = self.fp.read(1)
+        while not stop_condition():
+            char = next(content)
             if char == ':':
                 break
 
-        if self.fp.tell() == self.file_size:
+        if stop_condition():
             raise Exception()
 
-        while not self._file_is_eof():
-            char = self.fp.read(1)
+        while not stop_condition():
+            char = next(content)
             if char in " \n\t":
                 continue
 
             if char in "\"\'":
-                value = self._string_builder(char)
+                value = self._string_builder(char, content, stop_condition)
                 return _ValueTypeWrapper(value, type(str))
             elif char.isnumeric():
-                value = char + self._string_builder(',')
+                value = char + self._string_builder(',', content, stop_condition)
                 return _ValueTypeWrapper(value, type(int))
             elif char == '[':
-                value = self._list_builder()
+                value = self._list_builder(content, stop_condition)
                 return _ValueTypeWrapper(value, type(list))
             elif char == '{':
                 return _ScopeChange.Increase
 
         raise Exception("Unrechable Code")
 
-    def _list_builder(self) -> list:
+    def _list_builder(self, content: Iterator[str], stop_condition: Callable[[], bool]) -> list:
         result: list = []
 
-        while not self._file_is_eof:
-            pass
+        depth: int = 1
+
+        while not stop_condition():
+            char: str = next(content)
+
+            if not depth:
+                break
+
+            if char == ']':
+                depth -= 1
+            elif char == '[':
+                depth += 1
+                result.append([])
+            elif char in "\"\'":
+                value = self._string_builder(char, content, stop_condition)
+                result.append(value)
+            elif char.isnumeric():
+                value = self._string_builder(',', content, stop_condition)
+                result.append(value)
+
+
+
 
         return result
 
-    def _string_builder(self, closing_char: str) -> str:
+    def _num_indent(self, val: str) -> int | float:
+        if not val.isnumeric():
+            raise Exception("NaN")
+
+        if '.' in val and val.count('.') == 1:
+            return float(val)
+        else:
+            return int(val)
+
+    def _string_builder(self, closing_char: str, content: Iterator[str], stop_condition: Callable[[], bool]) -> str:
         result: str = ""
 
-        while not self._file_is_eof():
-            char = self.fp.read(1)
+        while not stop_condition():
+            char = next(content)
             if char == closing_char:
                 break
 
             if char == '\\':
-                special: str = self.fp.read(1)
+                special: str = next(content)
                 char = self._get_special_char(special)
 
                 if char == None:
@@ -170,7 +199,7 @@ class JsonParser(object):
         return val.value
 
     def _file_is_eof(self):
-        return self.fp.tell() > self.file_size
+        return self.fp.file_is_finished()
 
 
 if __name__ == "__main__":
