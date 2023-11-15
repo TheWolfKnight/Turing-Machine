@@ -4,7 +4,7 @@ from typing import Any, Type, Iterator, Callable
 from enum import Enum
 
 
-from fs import FileWrapper
+from wrappers import FileWrapper, StringWrapper
 
 
 class _ScopeChange(Enum):
