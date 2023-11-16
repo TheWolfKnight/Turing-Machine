@@ -1,6 +1,5 @@
 
-from json.JsonParser import *
-from json.JObject import *
+from json.JsonParser import JsonParser
 
 
 if __name__ == "__main__":
