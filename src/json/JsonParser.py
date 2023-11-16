@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from typing import Any, Type, Iterator, Callable
 from enum import Enum
 
-
 from wrappers import FileWrapper, IIterWrapper
 
 
